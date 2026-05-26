@@ -119,7 +119,7 @@ export const preloadLogo = async (branding: BrandingInfo): Promise<void> => {
   }
 
   try {
-    const logoUrl = `${import.meta.env.VITE_API_URL || ''}${branding.logo_url}`;
+    const logoUrl = `${import.meta.env.VITE_API_URL || '/api'}${branding.logo_url}`;
     const response = await fetch(logoUrl);
     if (!response.ok) return;
 
@@ -184,9 +184,12 @@ export const brandingApi = {
     return response.data;
   },
 
-  // Get logo URL as blob (hides backend URL from DOM)
-  getLogoUrl: (_branding: BrandingInfo): string | null => {
-    return _logoBlobUrl;
+  // Get logo URL. Prefer the public API URL so the logo survives reloads and deploys.
+  getLogoUrl: (branding: BrandingInfo): string | null => {
+    if (!branding.has_custom_logo || !branding.logo_url) {
+      return null;
+    }
+    return `${import.meta.env.VITE_API_URL || '/api'}${branding.logo_url}`;
   },
 
   // Get animation enabled (public, no auth required)
