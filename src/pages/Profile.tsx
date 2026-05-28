@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../store/auth';
 import { displayName } from '../utils/displayName';
+import { buildReferralLink } from '../utils/referralLink';
 import { authApi } from '../api/auth';
 import { isValidEmail } from '../utils/validation';
 import {
@@ -108,10 +109,7 @@ export default function Profile() {
   const isEmailAuthEnabled = emailAuthConfig?.enabled ?? true;
   const isEmailVerificationEnabled = emailAuthConfig?.verification_enabled ?? true;
 
-  // Build referral link for cabinet
-  const referralLink = referralInfo?.referral_code
-    ? `${window.location.origin}/login?ref=${referralInfo.referral_code}`
-    : '';
+  const referralLink = buildReferralLink(referralInfo?.referral_code);
 
   const copyReferralLink = () => {
     if (referralLink) {

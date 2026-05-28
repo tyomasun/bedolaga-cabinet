@@ -9,6 +9,7 @@ import { partnerApi } from '../api/partners';
 import { withdrawalApi } from '../api/withdrawals';
 import { CampaignCard } from '../components/partner/CampaignCard';
 import { useCurrency } from '../hooks/useCurrency';
+import { buildReferralLink } from '../utils/referralLink';
 
 const LinkIcon = () => (
   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -108,10 +109,7 @@ export default function Referral() {
     queryFn: referralApi.getReferralInfo,
   });
 
-  // Build referral link for cabinet registration
-  const referralLink = info?.referral_code
-    ? `${window.location.origin}/login?ref=${info.referral_code}`
-    : '';
+  const referralLink = buildReferralLink(info?.referral_code);
 
   const { data: terms } = useQuery({
     queryKey: ['referral-terms'],

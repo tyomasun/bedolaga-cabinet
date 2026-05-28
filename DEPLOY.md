@@ -112,6 +112,7 @@ VITE_API_URL=/api
 VITE_API_URL=/api
 VITE_APP_NAME=TrustNet
 VITE_APP_LOGO=T
+VITE_REFERRAL_BASE_URL=https://go.service-0.ru
 VITE_TELEGRAM_BOT_USERNAME=your_bot_username_without_at
 '@ | Set-Content -Path .env.production -Encoding UTF8
 ```
