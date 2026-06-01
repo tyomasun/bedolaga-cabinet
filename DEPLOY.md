@@ -1,6 +1,6 @@
 # Deploy bedolaga-cabinet для TrustNet
 
-Инструкция описывает безопасную сборку и деплой кабинета `bedolaga-cabinet` на `app.service-0.ru`.
+Инструкция описывает безопасную сборку и деплой кабинета `bedolaga-cabinet` на `app.zabugrom.net`.
 
 ## Важные правила
 
@@ -39,7 +39,7 @@ Key: C:\Users\akoch\.ssh\tyomasun-hetzner-key.ppk
 Публичный URL:
 
 ```text
-https://app.service-0.ru
+https://app.zabugrom.net
 ```
 
 Путь кабинета на сервере:
@@ -112,7 +112,7 @@ VITE_API_URL=/api
 VITE_API_URL=/api
 VITE_APP_NAME=TrustNet
 VITE_APP_LOGO=T
-VITE_REFERRAL_BASE_URL=https://go.service-0.ru
+VITE_REFERRAL_BASE_URL=https://zabugrom.net
 VITE_TELEGRAM_BOT_USERNAME=your_bot_username_without_at
 '@ | Set-Content -Path .env.production -Encoding UTF8
 ```
@@ -192,7 +192,7 @@ plink -batch -load app 'sudo find /var/www/trustnet-cabinet -mindepth 1 -maxdept
 Проверить, что кабинет отдает HTML:
 
 ```powershell
-curl.exe -I https://app.service-0.ru
+curl.exe -I https://app.zabugrom.net
 ```
 
 Ожидаемо:
@@ -204,8 +204,8 @@ HTTP/1.1 200 OK
 Проверить branding API:
 
 ```powershell
-curl.exe -s https://app.service-0.ru/api/cabinet/branding
-curl.exe -s -D - https://app.service-0.ru/api/cabinet/branding/logo -o NUL
+curl.exe -s https://app.zabugrom.net/api/cabinet/branding
+curl.exe -s -D - https://app.zabugrom.net/api/cabinet/branding/logo -o NUL
 ```
 
 Ожидаемо для логотипа:
@@ -218,25 +218,25 @@ Content-Type: image/png
 Проверить, что публичный JS содержит новый текст:
 
 ```powershell
-curl.exe -s https://app.service-0.ru/assets/ru-CBZN2WHo.js | rg "После первой оплаты друг получит бонус|зарегистрируются и оплатят"
+curl.exe -s https://app.zabugrom.net/assets/ru-CBZN2WHo.js | rg "После первой оплаты друг получит бонус|зарегистрируются и оплатят"
 ```
 
 Если имя `ru-*.js` изменилось после будущей сборки, найти актуальный файл:
 
 ```powershell
-curl.exe -s https://app.service-0.ru | rg -o 'assets/ru-[^" ]+\.js'
+curl.exe -s https://app.zabugrom.net | rg -o 'assets/ru-[^" ]+\.js'
 ```
 
 Проверить, что актуальный `index-*.js` содержит `/api${logo_url}`:
 
 ```powershell
-curl.exe -s https://app.service-0.ru | rg -o 'assets/index-[^" ]+\.js'
+curl.exe -s https://app.zabugrom.net | rg -o 'assets/index-[^" ]+\.js'
 ```
 
 Затем подставить найденный файл:
 
 ```powershell
-curl.exe -s https://app.service-0.ru/assets/<index-file>.js | rg 'getLogoUrl|/api\\$\\{.*logo_url|/api/cabinet/branding/logo'
+curl.exe -s https://app.zabugrom.net/assets/<index-file>.js | rg 'getLogoUrl|/api\\$\\{.*logo_url|/api/cabinet/branding/logo'
 ```
 
 ## Откат
@@ -251,7 +251,7 @@ plink -batch -load app 'ls -ld /var/www/trustnet-cabinet.backup-* | tail -10'
 
 ```powershell
 plink -batch -load app 'sudo rsync -a --delete /var/www/trustnet-cabinet.backup-YYYYMMDD-HHMMSS/ /var/www/trustnet-cabinet/'
-curl.exe -I https://app.service-0.ru
+curl.exe -I https://app.zabugrom.net
 ```
 
 ## Коммит и push локальных правок

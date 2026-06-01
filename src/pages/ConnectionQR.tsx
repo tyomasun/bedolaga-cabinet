@@ -68,7 +68,7 @@ export default function ConnectionQR() {
           </div>
 
           {!validState.hideLink && (
-            <p className="mt-6 max-w-full truncate text-center font-mono text-xs text-dark-500">
+            <p className="mt-6 max-w-full break-all text-center font-mono text-xs leading-relaxed text-dark-500">
               {validState.url}
             </p>
           )}

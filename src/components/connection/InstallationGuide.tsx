@@ -39,7 +39,7 @@ interface Props {
   onOpenDeepLink: (url: string) => void;
   isTelegramWebApp: boolean;
   onGoBack: () => void;
-  onOpenQR?: () => void;
+  onOpenQR?: (url?: string) => void;
 }
 
 export default function InstallationGuide({
@@ -141,6 +141,20 @@ export default function InstallationGuide({
     ],
   );
 
+  const selectedAppConnectionUrl = useMemo(() => {
+    const subscriptionButton = selectedApp?.blocks
+      .flatMap((block) => block.buttons ?? [])
+      .find((button) => button.type === 'subscriptionLink');
+
+    return (
+      subscriptionButton?.url ||
+      subscriptionButton?.link ||
+      selectedApp?.deepLink ||
+      subscriptionButton?.resolvedUrl ||
+      undefined
+    );
+  }, [selectedApp]);
+
   const selectedIsTv =
     (activePlatformKey || availablePlatforms[0]) === 'androidTV' ||
     (activePlatformKey || availablePlatforms[0]) === 'appleTV';
@@ -203,7 +217,7 @@ export default function InstallationGuide({
         </h2>
         {appConfig.subscriptionUrl && onOpenQR && (
           <button
-            onClick={() => onOpenQR()}
+            onClick={() => onOpenQR(selectedAppConnectionUrl)}
             aria-label={t('subscription.connection.openQr', 'Open QR code')}
             className="flex h-10 w-10 items-center justify-center rounded-xl border border-dark-700 bg-dark-800 text-dark-200 transition-colors hover:border-dark-600"
           >

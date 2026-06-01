@@ -79,7 +79,7 @@ export function BlockButtons({
         ) : null;
 
         if (btn.type === 'subscriptionLink') {
-          const url = btn.resolvedUrl || btn.url || btn.link || deepLink || subscriptionUrl;
+          const url = btn.url || btn.link || deepLink || btn.resolvedUrl || subscriptionUrl;
           if (!url || !isValidDeepLink(url)) return null;
           return (
             <button

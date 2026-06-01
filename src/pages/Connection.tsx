@@ -8,7 +8,7 @@ import { useTelegramSDK } from '../hooks/useTelegramSDK';
 import { useHaptic } from '@/platform';
 import { SettingsIcon } from '@/components/icons';
 import { resolveTemplate, hasTemplates } from '../utils/templateEngine';
-import { isHappCryptolinkMode, resolveConnectionUrlForUi } from '../utils/connectionLink';
+import { resolveConnectionUrlForUi } from '../utils/connectionLink';
 import { useAuthStore } from '../store/auth';
 import type { AppConfig, RemnawavePlatformData } from '../types';
 import InstallationGuide from '../components/connection/InstallationGuide';
@@ -69,24 +69,51 @@ export default function Connection() {
     navigate(-1);
   }, [navigate]);
 
-  const handleOpenQR = useCallback(() => {
-    if (!qrConnectionUrl) return;
-    navigate('/connection/qr', {
-      replace: !isTelegramWebApp,
-      state: {
-        url: qrConnectionUrl,
-        hideLink: connectionLink?.hide_link ?? appConfig?.hideLink ?? false,
-        subscriptionId: subId,
-      },
-    });
-  }, [
-    navigate,
-    qrConnectionUrl,
-    connectionLink?.hide_link,
-    appConfig?.hideLink,
-    isTelegramWebApp,
-    subId,
-  ]);
+  const resolveUrl = useCallback(
+    (url: string): string => {
+      if (!hasTemplates(url) || !appConfig?.subscriptionUrl) return url;
+      return resolveTemplate(url, {
+        subscriptionUrl: appConfig.subscriptionUrl,
+        username: user?.username ?? undefined,
+      });
+    },
+    [appConfig?.subscriptionUrl, user?.username],
+  );
+
+  const resolveConnectionTarget = useCallback(
+    (url?: string | null): string | null => {
+      const candidate = url?.trim();
+      if (!candidate) return qrConnectionUrl;
+      if (hasTemplates(candidate)) {
+        return resolveUrl(candidate);
+      }
+      return candidate;
+    },
+    [qrConnectionUrl, resolveUrl],
+  );
+
+  const handleOpenQR = useCallback(
+    (url?: string) => {
+      const resolvedUrl = resolveConnectionTarget(url);
+      if (!resolvedUrl) return;
+      navigate('/connection/qr', {
+        replace: !isTelegramWebApp,
+        state: {
+          url: resolvedUrl,
+          hideLink: connectionLink?.hide_link ?? appConfig?.hideLink ?? false,
+          subscriptionId: subId,
+        },
+      });
+    },
+    [
+      resolveConnectionTarget,
+      navigate,
+      connectionLink?.hide_link,
+      appConfig?.hideLink,
+      isTelegramWebApp,
+      subId,
+    ],
+  );
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -99,26 +126,10 @@ export default function Connection() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [handleGoBack]);
 
-  const resolveUrl = useCallback(
-    (url: string): string => {
-      if (!hasTemplates(url) || !appConfig?.subscriptionUrl) return url;
-      return resolveTemplate(url, {
-        subscriptionUrl: appConfig.subscriptionUrl,
-        username: user?.username ?? undefined,
-      });
-    },
-    [appConfig?.subscriptionUrl, user?.username],
-  );
-
   const openDeepLink = useCallback(
     (deepLink: string) => {
-      let resolved = deepLink;
-      if (isHappCryptolinkMode(connectionLink?.connect_mode) && qrConnectionUrl) {
-        // In HAPP cryptolink mode always open the resolved happ://crypt... URL.
-        resolved = qrConnectionUrl;
-      } else if (hasTemplates(resolved)) {
-        resolved = resolveUrl(resolved);
-      }
+      const resolved = resolveConnectionTarget(deepLink);
+      if (!resolved) return;
       const isHttpUrl = /^https?:\/\//i.test(resolved);
       const finalUrlForTelegram = isHttpUrl
         ? resolved
@@ -136,7 +147,7 @@ export default function Connection() {
       // In regular browsers open deeplink directly (without intermediate redirect page).
       window.location.href = resolved;
     },
-    [isTelegramWebApp, i18n.language, resolveUrl, connectionLink?.connect_mode, qrConnectionUrl],
+    [isTelegramWebApp, i18n.language, resolveConnectionTarget],
   );
 
   // Check if any platform has configured apps

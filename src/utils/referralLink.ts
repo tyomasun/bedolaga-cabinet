@@ -1,4 +1,4 @@
-const DEFAULT_REFERRAL_BASE_URL = 'https://go.service-0.ru';
+const DEFAULT_REFERRAL_BASE_URL = 'https://zabugrom.net';
 
 export function buildReferralLink(referralCode?: string | null): string {
   if (!referralCode) return '';
