@@ -15,9 +15,10 @@ import { ThemeColorsProvider } from './providers/ThemeColorsProvider';
 import { WebSocketProvider } from './providers/WebSocketProvider';
 import { ToastProvider } from './components/Toast';
 import { TooltipProvider } from './components/primitives/Tooltip';
-import { isInTelegramWebApp } from './hooks/useTelegramSDK';
+import { isInTelegramWebApp, closeTelegramApp } from './hooks/useTelegramSDK';
 import { getFallbackParentPath } from './utils/navigation';
 import { subscriptionApi } from './api/subscription';
+import { useBlockingStore } from './store/blocking';
 
 const TWEMOJI_OPTIONS = { className: 'twemoji', folder: 'svg', ext: '.svg' } as const;
 
@@ -28,11 +29,11 @@ const TWEMOJI_OPTIONS = { className: 'twemoji', folder: 'svg', ext: '.svg' } as 
 /** Pages reachable from bottom nav — treat as top-level (no back button). */
 const BOTTOM_NAV_PATHS = ['/', '/subscriptions', '/balance', '/referral', '/support', '/wheel'];
 
-/** Matches /subscriptions/:numericId. Single-tariff users land here straight
- * from bot deep-links, and their /subscriptions list auto-redirects right back
- * to this page (Subscriptions.tsx). So on a genuine deep-link entry (in-app
- * navigation depth 0) we hide the back button and let Telegram surface its
- * native Close (X); when there IS in-app history we show it and navigate back. */
+/** Matches /subscriptions/:numericId. When the user has a single tariff and at
+ * most one subscription, the /subscriptions list auto-redirects straight back
+ * here (Subscriptions.tsx), so this page is effectively top-level: we hide the
+ * back button and let Telegram surface its native Close (X). Multi-tariff users
+ * (or anyone with >1 subscription) keep a real Back to their meaningful list. */
 const SUBSCRIPTION_DETAIL_RE = /^\/subscriptions\/\d+\/?$/;
 
 function TelegramBackButton() {
@@ -43,6 +44,13 @@ function TelegramBackButton() {
   navigateRef.current = navigate;
   const pathnameRef = useRef(location.pathname);
   pathnameRef.current = location.pathname;
+
+  // A full-screen blocking overlay (maintenance / channel-sub / blacklist /
+  // account-deleted / backend-unavailable) takes over the native back button:
+  // there is nowhere to navigate, so it becomes a single, stable EXIT control.
+  const blockingType = useBlockingStore((state) => state.blockingType);
+  const blockingTypeRef = useRef(blockingType);
+  blockingTypeRef.current = blockingType;
 
   // Reliable in-app navigation depth (the app's entry point is 0). Driven by
   // React Router's navigation TYPE — NOT window.history.state.idx, which the
@@ -71,30 +79,58 @@ function TelegramBackButton() {
     enabled: isInTelegramWebApp(),
   });
   const isMultiTariff = subData?.multi_tariff_enabled ?? false;
+  const subsCount = subData?.subscriptions?.length ?? 0;
+  // The /subscriptions list silently redirects straight back to the open detail
+  // page when there is a single tariff and at most one subscription
+  // (Subscriptions.tsx). In that mode the detail page IS the top-level screen —
+  // there is no meaningful "back" target. Inverse of the handler's `listIsSafe`.
+  // Defaults to true on a cold cache (isMultiTariff=false, subsCount=0): hiding
+  // Back is fail-closed — far better than briefly arming the looping Back.
+  const listRedirectsToDetail = !isMultiTariff && subsCount <= 1;
 
   // Refs so the stable back handler (memoised with []) reads fresh values
   // without re-subscribing — re-subscription lets a component's local handler
   // overwrite ours via Telegram's singleton onBackButtonClick (issue #436).
   const isMultiTariffRef = useRef(isMultiTariff);
   isMultiTariffRef.current = isMultiTariff;
-  const subsCountRef = useRef(subData?.subscriptions?.length ?? 0);
-  subsCountRef.current = subData?.subscriptions?.length ?? 0;
+  const subsCountRef = useRef(subsCount);
+  subsCountRef.current = subsCount;
 
   useEffect(() => {
+    // On a blocking overlay, keep exactly one visible Back button (its click
+    // exits the app — see handler). Skip the route logic so it can't flip
+    // between Back and Close as the hidden route changes underneath.
+    if (blockingType) {
+      try {
+        showBackButton();
+      } catch {}
+      return;
+    }
     const isTopLevel = location.pathname === '' || BOTTOM_NAV_PATHS.includes(location.pathname);
-    const isSingleTariffDetailDeepLink =
-      !isMultiTariff && SUBSCRIPTION_DETAIL_RE.test(location.pathname) && depthRef.current === 0;
+    // Depth-independent on purpose: whether the user deep-linked in or navigated
+    // here in-app, a single-tariff detail whose list just bounces back has no
+    // real "back" target. Showing Back here is exactly what looped through the
+    // redirecting /subscriptions list (#436); hiding it always surfaces Close.
+    const isRedirectingSubscriptionDetail =
+      listRedirectsToDetail && SUBSCRIPTION_DETAIL_RE.test(location.pathname);
     try {
-      if (isTopLevel || isSingleTariffDetailDeepLink) {
+      if (isTopLevel || isRedirectingSubscriptionDetail) {
         hideBackButton();
       } else {
         showBackButton();
       }
     } catch {}
-  }, [location, isMultiTariff]);
+  }, [location, listRedirectsToDetail, blockingType]);
 
   // Stable handler — ref prevents re-subscription on every render
   const handler = useCallback(() => {
+    // A blocking overlay is a hard block with nowhere to navigate — the back
+    // button's only job is to EXIT the Mini App (no SPA navigation, so it can't
+    // flip-flop between Back and Close).
+    if (blockingTypeRef.current) {
+      closeTelegramApp();
+      return;
+    }
     // Real in-app history (depth > 0): a normal back. Otherwise we were opened
     // directly on this route via a deep-link — navigate(-1) is a no-op, so fall
     // back to a sensible parent route instead.
