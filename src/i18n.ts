@@ -2,19 +2,19 @@ import i18n, { type ResourceLanguage } from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 import { getTelegramLanguageCode } from './hooks/useTelegramSDK';
+import ruTranslations from './locales/ru.json';
 
 const localeLoaders: Record<string, () => Promise<{ default: ResourceLanguage }>> = {
-  ru: () => import('./locales/ru.json'),
   en: () => import('./locales/en.json'),
   zh: () => import('./locales/zh.json'),
   fa: () => import('./locales/fa.json'),
 };
 
-const SUPPORTED_LANGS = Object.keys(localeLoaders);
+const SUPPORTED_LANGS = ['ru', ...Object.keys(localeLoaders)];
 const FALLBACK_LNG = 'ru';
 const LANGUAGE_STORAGE_KEY = 'cabinet_language';
 
-const loadedLanguages = new Set<string>();
+const loadedLanguages = new Set<string>(['ru']);
 
 async function loadLanguage(lng: string): Promise<void> {
   if (loadedLanguages.has(lng)) return;
@@ -45,6 +45,12 @@ i18n
       escapeValue: false,
     },
 
+    resources: {
+      ru: {
+        translation: ruTranslations,
+      },
+    },
+
     react: {
       useSuspense: false,
     },
@@ -55,7 +61,9 @@ i18n
 // Load detected language + fallback on startup
 const detectedLng = i18n.language?.split('-')[0] || FALLBACK_LNG;
 const langsToLoad = [FALLBACK_LNG, ...(detectedLng !== FALLBACK_LNG ? [detectedLng] : [])];
-Promise.all(langsToLoad.map(loadLanguage));
+void Promise.all(langsToLoad.map(loadLanguage)).catch(() => {
+  // Optional locale chunks must never block app bootstrap.
+});
 
 // Keep <html lang> + dir in sync with i18n so screen readers pronounce
 // content correctly, browsers don't offer to translate it, and RTL
@@ -78,7 +86,7 @@ syncHtmlLang(detectedLng);
 // Lazy-load on language change
 i18n.on('languageChanged', (lng: string) => {
   const code = lng.split('-')[0];
-  loadLanguage(code);
+  void loadLanguage(code);
   syncHtmlLang(code);
 });
 
