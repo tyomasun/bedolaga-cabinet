@@ -11,7 +11,7 @@ import {
 } from '@/api/branding';
 import { setFavicon, letterFaviconDataUri, roundedFaviconDataUri } from '@/utils/favicon';
 
-const FALLBACK_NAME = import.meta.env.VITE_APP_NAME || 'Cabinet';
+const FALLBACK_NAME = import.meta.env.VITE_APP_NAME || 'Zabugrom';
 const FALLBACK_LOGO = import.meta.env.VITE_APP_LOGO || 'V';
 
 export function useBranding() {
@@ -40,7 +40,7 @@ export function useBranding() {
 
   // Set document title
   useEffect(() => {
-    document.title = appName || 'VPN';
+    document.title = appName || FALLBACK_NAME;
   }, [appName]);
 
   // Update favicon — custom logo (rounded like the header tile) when available,

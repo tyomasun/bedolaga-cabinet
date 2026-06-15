@@ -59,6 +59,7 @@ export default function DeepLinkRedirect() {
   const fallbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const fallbackAppName = import.meta.env.VITE_APP_NAME || 'Zabugrom';
   // Get branding
   const { data: branding } = useQuery({
     queryKey: ['branding'],
@@ -66,7 +67,7 @@ export default function DeepLinkRedirect() {
     staleTime: 60000,
   });
 
-  const projectName = branding ? branding.name : import.meta.env.VITE_APP_NAME || 'VPN';
+  const projectName = branding ? branding.name : fallbackAppName;
   const logoLetter = branding?.logo_letter || import.meta.env.VITE_APP_LOGO || 'V';
   const logoUrl = branding ? brandingApi.getLogoUrl(branding) : null;
 
@@ -94,7 +95,7 @@ export default function DeepLinkRedirect() {
   const appInfo = deepLink
     ? appSchemes.find((a) => deepLink.toLowerCase().startsWith(a.scheme))
     : null;
-  const appName = appInfo?.name || appParam || 'VPN';
+  const appName = appInfo?.name || appParam || fallbackAppName;
   const appIcon = appInfo?.icon || appName[0]?.toUpperCase() || 'V';
 
   // Open deep link - same as miniapp, just window.location.href
@@ -174,7 +175,7 @@ export default function DeepLinkRedirect() {
           )}
         </div>
 
-        <h1 className="mb-1 text-2xl font-bold text-dark-50">{projectName || 'VPN'}</h1>
+        <h1 className="mb-1 text-2xl font-bold text-dark-50">{projectName || fallbackAppName}</h1>
 
         {status !== 'error' && (
           <p className="mb-6 text-dark-400">
