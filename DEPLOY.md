@@ -1,269 +1,67 @@
 # Deploy bedolaga-cabinet для TrustNet
 
-Инструкция описывает безопасную сборку и деплой кабинета `bedolaga-cabinet` на `app.zabugrom.net`.
+Канонический service ID — `app.cabinet`. Host alias, endpoint и production path находятся в [infra inventory](../infra/inventory.yaml), общая политика — в [operations](../infra/operations.md).
 
-## Важные правила
+## Правила
 
-- Рабочая ветка для TrustNet: `trustnet-custom`.
-- Не деплоить чистый upstream `BEDOLAGA-DEV/bedolaga-cabinet` напрямую, иначе можно потерять локальные правки TrustNet.
-- Перед заменой файлов на сервере всегда делать backup.
-- Не хранить в репозитории пароли, токены, приватные ключи и секреты платежек.
-- После деплоя обязательно проверить публичный URL через `curl`.
-- Если браузер показывает старую версию, сделать hard refresh: старые JS/CSS assets могли остаться в кэше.
+- Рабочая ветка кастомизации — `trustnet-custom`; чистый upstream напрямую не деплоить.
+- Не переключать ветку и не обновлять upstream при незакоммиченных правках.
+- Vite вшивает `VITE_*` в public JS: секреты в build variables запрещены.
+- До замены production обязателен timestamped backup, после — health-check, smoke-test и готовый rollback.
+- Подключаться через OpenSSH alias `app`, подготовленный по [access guide](../infra/access/README.md); PuTTY registry и пользовательский путь к ключу не требуются.
 
-## Что уже входит в trustnet-custom
+## Подготовка исходников
 
-Ветка `trustnet-custom` содержит локальные правки TrustNet:
+Из каталога `bedolaga-cabinet`:
 
-- текст реферальной подсказки без `0% комиссии`;
-- фикс URL логотипа через `/api/cabinet/branding/logo`.
-
-Проверить последние коммиты:
-
-```powershell
-cd D:\projects\trustnet\bedolaga-cabinet
+```text
+git status --short --branch
 git log --oneline -5
 ```
 
-## Сервер и пути
+Если требуется upstream update, сначала обновить `main`, затем вручную merge в `trustnet-custom`. Конфликты разрешить до сборки и повторно проверить локальные TrustNet-кастомизации. Деплоить только понятное, проверенное состояние working tree.
 
-Сервер:
-
-```text
-Putty session: app
-Host: 92.113.151.74
-User: admin
-Key: C:\Users\akoch\.ssh\tyomasun-hetzner-key.ppk
-```
-
-Публичный URL:
-
-```text
-https://app.zabugrom.net
-```
-
-Путь кабинета на сервере:
-
-```text
-/var/www/trustnet-cabinet
-```
-
-Временная папка для загрузки build:
-
-```text
-/tmp/trustnet-cabinet-dist
-```
-
-## Подготовка локального репозитория
-
-Перейти в локальный fork:
-
-```powershell
-cd D:\projects\trustnet\bedolaga-cabinet
-git checkout trustnet-custom
-git status --short --branch
-```
-
-Рабочее дерево перед сборкой должно быть чистым, если нет сознательных незакоммиченных правок.
-
-## Обновление из upstream
-
-Если нужно подтянуть свежую версию оригинального `bedolaga-cabinet`, делать через `main`, затем мержить в `trustnet-custom`:
-
-```powershell
-cd D:\projects\trustnet\bedolaga-cabinet
-
-git checkout main
-git fetch upstream
-git merge upstream/main
-git push origin main
-
-git checkout trustnet-custom
-git merge main
-```
-
-Если Git покажет конфликт, разрешить его вручную. Особое внимание:
-
-```text
-src/locales/ru.json
-src/api/branding.ts
-```
-
-После успешного merge:
-
-```powershell
-git status --short --branch
-```
-
-## Переменные сборки
-
-Vite вшивает `VITE_*` переменные в JS на этапе build.
-
-Для текущей схемы важен API-префикс:
-
-```text
-VITE_API_URL=/api
-```
-
-Можно создать локальный `.env.production`, но не коммитить его:
-
-```powershell
-@'
-VITE_API_URL=/api
-VITE_APP_NAME=TrustNet
-VITE_APP_LOGO=T
-VITE_REFERRAL_BASE_URL=https://zabugrom.net
-VITE_TELEGRAM_BOT_USERNAME=your_bot_username_without_at
-'@ | Set-Content -Path .env.production -Encoding UTF8
-```
-
-Если `.env.production` не создан, текущий TrustNet-fix для логотипа использует fallback `/api`.
+Build-time конфигурация задаётся локальным, некоммитимым `.env.production`. Для текущей схемы API prefix — `/api`; значения branding/referral/bot username сверять с владельцем продукта. Не копировать production secrets в frontend env.
 
 ## Сборка
 
-```powershell
-cd D:\projects\trustnet\bedolaga-cabinet
+```text
 npm ci
 npm run build
 ```
 
-После сборки должен появиться каталог:
+Проверить наличие `dist/`, ожидаемый реферальный текст, branding URL через `/api` и отсутствие секретов/source maps, если они не предусмотрены release policy.
 
-```text
-D:\projects\trustnet\bedolaga-cabinet\dist
-```
+## Backup и загрузка
 
-Проверить, что нужный текст попал в build:
+Production path в командах должен совпадать с `app.cabinet.path` в inventory.
 
 ```powershell
-rg "После первой оплаты друг получит бонус" dist
+ssh app 'set -e; ts=$(date +%Y%m%d-%H%M%S); sudo cp -a /var/www/trustnet-cabinet /var/www/trustnet-cabinet.backup-$ts; rm -rf /tmp/trustnet-cabinet-dist; mkdir -p /tmp/trustnet-cabinet-dist'
+scp -r ./dist/. app:/tmp/trustnet-cabinet-dist/
+ssh app 'set -e; sudo rsync -a --delete /tmp/trustnet-cabinet-dist/ /var/www/trustnet-cabinet/; rm -rf /tmp/trustnet-cabinet-dist'
 ```
 
-Проверить, что logo URL идет через `/api`:
+Если `rsync` отсутствует, остановиться и подготовить отдельно проверенную атомарную замену. Не очищать production directory без подтверждённого backup.
 
-```powershell
-Get-ChildItem dist\assets\index-*.js | ForEach-Object {
-  rg "/api\\$\\{.*logo_url|/api/cabinet/branding/logo|getLogoUrl" $_.FullName
-}
-```
+## Smoke-test
 
-## Backup на сервере
-
-Важно: в PowerShell команду с `$(date ...)` передавать в одинарных кавычках, иначе PowerShell попытается выполнить `date` локально.
-
-```powershell
-plink -batch -load app 'ts=$(date +%Y%m%d-%H%M%S); sudo cp -a /var/www/trustnet-cabinet /var/www/trustnet-cabinet.backup-$ts; echo backup=/var/www/trustnet-cabinet.backup-$ts; rm -rf /tmp/trustnet-cabinet-dist; mkdir -p /tmp/trustnet-cabinet-dist'
-```
-
-Проверить backup при необходимости:
-
-```powershell
-plink -batch -load app 'ls -ld /var/www/trustnet-cabinet.backup-* | tail -5'
-```
-
-## Загрузка build на сервер
-
-```powershell
-pscp -batch -P 22 -i C:\Users\akoch\.ssh\tyomasun-hetzner-key.ppk -r D:\projects\trustnet\bedolaga-cabinet\dist\* admin@92.113.151.74:/tmp/trustnet-cabinet-dist/
-```
-
-Проверить, что файлы загрузились:
-
-```powershell
-plink -batch -load app 'find /tmp/trustnet-cabinet-dist -maxdepth 2 -type f | wc -l; ls -la /tmp/trustnet-cabinet-dist | head'
-```
-
-## Замена текущего кабинета
-
-Основной вариант через `rsync`:
-
-```powershell
-plink -batch -load app 'sudo rsync -a --delete /tmp/trustnet-cabinet-dist/ /var/www/trustnet-cabinet/ && rm -rf /tmp/trustnet-cabinet-dist && echo deployed'
-```
-
-Если на сервере нет `rsync`, использовать fallback:
-
-```powershell
-plink -batch -load app 'sudo find /var/www/trustnet-cabinet -mindepth 1 -maxdepth 1 -exec rm -rf {} + && sudo cp -a /tmp/trustnet-cabinet-dist/. /var/www/trustnet-cabinet/ && rm -rf /tmp/trustnet-cabinet-dist && echo deployed'
-```
-
-## Проверка после деплоя
-
-Проверить, что кабинет отдает HTML:
+Выполнить профиль `public` и проверки `app_nginx`, `app_bot_tunnel`, `oracle_bedolaga_bot` из [health checks](../infra/health-checks.yaml). Дополнительно проверить:
 
 ```powershell
 curl.exe -I https://app.zabugrom.net
-```
-
-Ожидаемо:
-
-```text
-HTTP/1.1 200 OK
-```
-
-Проверить branding API:
-
-```powershell
-curl.exe -s https://app.zabugrom.net/api/cabinet/branding
 curl.exe -s -D - https://app.zabugrom.net/api/cabinet/branding/logo -o NUL
 ```
 
-Ожидаемо для логотипа:
-
-```text
-HTTP/1.1 200 OK
-Content-Type: image/png
-```
-
-Проверить, что публичный JS содержит новый текст:
-
-```powershell
-curl.exe -s https://app.zabugrom.net/assets/ru-CBZN2WHo.js | rg "После первой оплаты друг получит бонус|зарегистрируются и оплатят"
-```
-
-Если имя `ru-*.js` изменилось после будущей сборки, найти актуальный файл:
-
-```powershell
-curl.exe -s https://app.zabugrom.net | rg -o 'assets/ru-[^" ]+\.js'
-```
-
-Проверить, что актуальный `index-*.js` содержит `/api${logo_url}`:
-
-```powershell
-curl.exe -s https://app.zabugrom.net | rg -o 'assets/index-[^" ]+\.js'
-```
-
-Затем подставить найденный файл:
-
-```powershell
-curl.exe -s https://app.zabugrom.net/assets/<index-file>.js | rg 'getLogoUrl|/api\\$\\{.*logo_url|/api/cabinet/branding/logo'
-```
+Убедиться, что HTML ссылается на существующие hash-assets, кабинет загружается без ошибок, branding работает, а read-only API-вызов проходит через tunnel. Не выполнять реальную оплату как smoke-test.
 
 ## Откат
 
-Если после деплоя что-то сломалось, найти последний backup:
+Выбрать конкретный timestamped backup, затем:
 
 ```powershell
-plink -batch -load app 'ls -ld /var/www/trustnet-cabinet.backup-* | tail -10'
-```
-
-Восстановить нужный backup:
-
-```powershell
-plink -batch -load app 'sudo rsync -a --delete /var/www/trustnet-cabinet.backup-YYYYMMDD-HHMMSS/ /var/www/trustnet-cabinet/'
+ssh app 'sudo rsync -a --delete /var/www/trustnet-cabinet.backup-YYYYMMDD-HHMMSS/ /var/www/trustnet-cabinet/'
 curl.exe -I https://app.zabugrom.net
 ```
 
-## Коммит и push локальных правок
-
-Если после деплоя менялись исходники, сохранить их в fork:
-
-```powershell
-cd D:\projects\trustnet\bedolaga-cabinet
-git status --short --branch
-git add <changed-files>
-git commit -m "Describe TrustNet cabinet change"
-git push
-```
-
-Деплоить в production следует только изменения, которые сохранены в `trustnet-custom`, чтобы следующий update не потерял локальные кастомизации.
+После success или rollback записать production-результат по [change log](../infra/changes/README.md). Локальные изменения сохранить в `trustnet-custom` отдельным коммитом только после проверки; инструкция сама коммит не создаёт.
