@@ -6,7 +6,7 @@ import { useAuthStore } from './store/auth';
  * Wrapper around React.lazy that auto-reloads the page when a chunk fails to load
  * (e.g. after a new deploy with different chunk hashes).
  */
-function lazyWithRetry<T extends ComponentType<unknown>>(factory: () => Promise<{ default: T }>) {
+function lazyWithRetry<T extends ComponentType<any>>(factory: () => Promise<{ default: T }>) {
   return lazy(() =>
     factory().catch(() => {
       const key = 'chunk_reload_ts';
@@ -23,29 +23,31 @@ function lazyWithRetry<T extends ComponentType<unknown>>(factory: () => Promise<
 import { useBlockingStore } from './store/blocking';
 import Layout from './components/layout/Layout';
 import PageLoader from './components/common/PageLoader';
-import {
-  MaintenanceScreen,
-  ChannelSubscriptionScreen,
-  BlacklistedScreen,
-  AccountDeletedScreen,
-  ServiceUnavailableScreen,
-} from './components/blocking';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { PermissionRoute } from '@/components/auth/PermissionRoute';
 import { saveReturnUrl } from './utils/token';
 import { useAnalyticsCounters } from './hooks/useAnalyticsCounters';
 import { useSiteVerification } from './hooks/useSiteVerification';
-// Auth pages - load immediately (small)
+// Keep the interactive login page eager.
 import Login from './pages/Login';
-import TelegramCallback from './pages/TelegramCallback';
-import TelegramRedirect from './pages/TelegramRedirect';
-import DeepLinkRedirect from './pages/DeepLinkRedirect';
-import VerifyEmail from './pages/VerifyEmail';
-import ResetPassword from './pages/ResetPassword';
-import OAuthCallback from './pages/OAuthCallback';
-
-// Dashboard - load eagerly (default route, LCP-critical)
-import Dashboard from './pages/Dashboard';
+const TelegramCallback = lazyWithRetry(() => import('./pages/TelegramCallback'));
+const TelegramRedirect = lazyWithRetry(() => import('./pages/TelegramRedirect'));
+const DeepLinkRedirect = lazyWithRetry(() => import('./pages/DeepLinkRedirect'));
+const VerifyEmail = lazyWithRetry(() => import('./pages/VerifyEmail'));
+const ResetPassword = lazyWithRetry(() => import('./pages/ResetPassword'));
+const OAuthCallback = lazyWithRetry(() => import('./pages/OAuthCallback'));
+const MaintenanceScreen = lazyWithRetry(() => import('./components/blocking/MaintenanceScreen'));
+const ChannelSubscriptionScreen = lazyWithRetry(
+  () => import('./components/blocking/ChannelSubscriptionScreen'),
+);
+const BlacklistedScreen = lazyWithRetry(() => import('./components/blocking/BlacklistedScreen'));
+const AccountDeletedScreen = lazyWithRetry(
+  () => import('./components/blocking/AccountDeletedScreen'),
+);
+const ServiceUnavailableScreen = lazyWithRetry(
+  () => import('./components/blocking/ServiceUnavailableScreen'),
+);
+const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'));
 
 // User pages - lazy load
 const Subscriptions = lazyWithRetry(() => import('./pages/Subscriptions'));
@@ -177,7 +179,11 @@ function ProtectedRoute({
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
-  return withLayout ? <Layout>{children}</Layout> : <>{children}</>;
+  if (!withLayout) {
+    return <>{children}</>;
+  }
+
+  return <Layout>{children}</Layout>;
 }
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
@@ -218,23 +224,43 @@ function BlockingOverlay() {
   const blockingType = useBlockingStore((state) => state.blockingType);
 
   if (blockingType === 'maintenance') {
-    return <MaintenanceScreen />;
+    return (
+      <Suspense fallback={<PageLoader variant="dark" />}>
+        <MaintenanceScreen />
+      </Suspense>
+    );
   }
 
   if (blockingType === 'channel_subscription') {
-    return <ChannelSubscriptionScreen />;
+    return (
+      <Suspense fallback={<PageLoader variant="dark" />}>
+        <ChannelSubscriptionScreen />
+      </Suspense>
+    );
   }
 
   if (blockingType === 'blacklisted') {
-    return <BlacklistedScreen />;
+    return (
+      <Suspense fallback={<PageLoader variant="dark" />}>
+        <BlacklistedScreen />
+      </Suspense>
+    );
   }
 
   if (blockingType === 'account_deleted') {
-    return <AccountDeletedScreen />;
+    return (
+      <Suspense fallback={<PageLoader variant="dark" />}>
+        <AccountDeletedScreen />
+      </Suspense>
+    );
   }
 
   if (blockingType === 'backend_unavailable') {
-    return <ServiceUnavailableScreen />;
+    return (
+      <Suspense fallback={<PageLoader variant="dark" />}>
+        <ServiceUnavailableScreen />
+      </Suspense>
+    );
   }
 
   return null;
@@ -258,14 +284,70 @@ function App() {
       <Routes>
         {/* Public routes */}
         <Route path="/login" element={<Login />} />
-        <Route path="/auth/telegram/callback" element={<TelegramCallback />} />
-        <Route path="/auth/telegram" element={<TelegramRedirect />} />
-        <Route path="/tg" element={<TelegramRedirect />} />
-        <Route path="/connect" element={<DeepLinkRedirect />} />
-        <Route path="/add" element={<DeepLinkRedirect />} />
-        <Route path="/auth/oauth/callback" element={<OAuthCallback />} />
-        <Route path="/verify-email" element={<VerifyEmail />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route
+          path="/auth/telegram/callback"
+          element={
+            <LazyPage>
+              <TelegramCallback />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="/auth/telegram"
+          element={
+            <LazyPage>
+              <TelegramRedirect />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="/tg"
+          element={
+            <LazyPage>
+              <TelegramRedirect />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="/connect"
+          element={
+            <LazyPage>
+              <DeepLinkRedirect />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="/add"
+          element={
+            <LazyPage>
+              <DeepLinkRedirect />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="/auth/oauth/callback"
+          element={
+            <LazyPage>
+              <OAuthCallback />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="/verify-email"
+          element={
+            <LazyPage>
+              <VerifyEmail />
+            </LazyPage>
+          }
+        />
+        <Route
+          path="/reset-password"
+          element={
+            <LazyPage>
+              <ResetPassword />
+            </LazyPage>
+          }
+        />
         <Route
           path="/merge/:mergeToken"
           element={
